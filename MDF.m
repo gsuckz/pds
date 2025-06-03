@@ -1,58 +1,134 @@
-load('ws.mat'); %Esto para cargar los filtros creados durante el
-%desarrollo del programa
-%Se cargan los archivos de audio
-fs = 8000;
-[s16k, fs16] = audioread('16khz.wav');
-[s24k, fs24] = audioread('24khz.wav');
-[s32k, fs32] = audioread('32khz.wav');
+clc; clear; close all;
 
-%GRAFICAR SEÑALES (Tiempo y Espectro)
-%{
-ESPACIO PARA los Graficos
-%}
+% Archivos de entrada (uno por cada frecuencia de muestreo)
+archivos = {'16khz.wav', '24khz.wav', '32khz.wav'}; %Incluyo arhivos nombrados por su fsampleo
+fs_list = [16000, 24000, 32000]; %Genero un vector con las fsamples (puedo hacerlo porque son conocidas)
+colores = lines(3);  % Colores para graficar
 
-% Adecuación de la señal al estándar de banda base fijado por CCITT/ITU para telefonía fija (300 Hz a 3,4 KHz)
-% Filtro Pasa Banda
-%Se generan los filtros a través del a herramienta de filtedesign (GUI) 
+%% ADQUISICIÓN Y ESPECTRO
+fprintf('--- Análisis espectral de señales originales ---\n')
+for k = 1:3 %Bucle para leer las 3 señales
+    [x, fs] = audioread(archivos{k});  %Leo la señal obetniendo el vector y su fsamle
+    t = (0:length(x)-1)/fs; %genero el Vector t
 
-s1 = filter(f16k1, s16k); 
-s2 = filter(f24k1, s24k); 
-s3 = filter(f32k1, s32k);
+    % Espectro
+    N = length(x);
+    X = abs(fft(x));
+    f = linspace(0, fs, N); %Genero el espectro hasta Fsample 
+
+    figure(1);
+    subplot(3,1,k);
+    plot(f(1:N/2), 20*log10(X(1:N/2)), 'Color', colores(k,:));
+    xlabel('Frecuencia (Hz)');
+    ylabel('Magnitud (dB)');
+    title([archivos{k} ' - fs = ' num2str(fs/1000) ' kHz']);
+    grid on;
+end
+
+%% FILTRO ANTIALIASING ANALÓGICO (para fs = 8 kHz)
+%% Diseño del filtro analogico necesario (No implementado, solo se grafica su función de Transferencia)
+fp = 3400; Ap = 1;
+fs_alias = 4000; As = 40;
+
+fprintf('\n--- Filtro antialiasing analógico ---\n')
+[na, Wn_a] = buttord(2*pi*fp, 2*pi*fs_alias, Ap, As, 's');
+[ba, aa] = butter(na, Wn_a, 's');
+Ha = tf(ba, aa);
+
+figure;
+bode(Ha);
+title('Filtro antialiasing analógico');
+grid on;
+
+%% FILTROS DIGITALES PARA 3 TASAS DE MUESTREO
+filtros = {};
+ordenes = [];
+for i = 1:3
+    fs = fs_list(i);
+    fprintf('\n--- Filtro digital para fs = %d Hz ---\n', fs);
+    Wp = fp / (fs/2);  % Normalización de la Frecuencia de paso de 1dB a la frecuencia de sampleo de cada señal
+    [n, Wn] = buttord(Wp, 0.5, Ap, As);
+    [b, a] = butter(n, Wn);
+    filtros{i} = struct('fs', fs, 'b', b, 'a', a);
+    ordenes(i) = n;
+    % Graficar respuestas
+    figure;
+    freqz(b, a, 1024, fs);
+    title(sprintf('Filtro digital Butterworth - fs = %d Hz', fs));
+    drawnow; 
+
+    figure;
+    zplane(b, a);
+    title(sprintf('Polos y ceros - fs = %d Hz', fs));
+    drawnow; 
+    
+    figure;
+    impz(b, a, [], fs);
+    title(sprintf('Respuesta al impulso - fs = %d Hz', fs));
+    drawnow; 
+end
+
+%% FILTRADO Y ESPECTRO DE SALIDA
+fprintf('\n--- Filtrado digital de las señales ---\n')
+for k = 1:3
+    [x, fs] = audioread(archivos{k});
+    fdata = filtros{k};
+    y = filter(fdata.b, fdata.a, x); %Esta notacion toma los elementos del struct despues del punto
+
+    % Espectro
+    Y = abs(fft(y));
+    N = length(Y);
+    f = linspace(0, fs, N);
+
+    figure(20);
+    subplot(3,1,k);
+    plot(f(1:N/2), 20*log10(Y(1:N/2)), 'Color', colores(k,:));
+    xlabel('Frecuencia (Hz)');
+    ylabel('Magnitud (dB)');
+    title(['Filtrada: ' archivos{k}]);
+    grid on;
+end
 
 
-%GRAFICAR SEÑALES (Tiempo y Espectro)
-%{
-ESPACIO PARA los Graficos
-%}
+%% DECIMACIÓN Y CUANTIZACIÓN A 12 BITS DE TODAS LAS SEÑALES
+fprintf('\n--- Decimación y cuantización para todas las señales ---\n')
+for k = 1:3
+    [x, fs] = audioread(archivos{k});
+    fdata = filtros{k};
+    y = filter(fdata.b, fdata.a, x);   % Aplicar el filtro digital
 
-%Se re-samplea (? a 8kHz las señales de banda base
+    % Decimación a 8 kHz
+    factor_decimacion = fs / 8000;
+    if mod(factor_decimacion,1) ~= 0
+        error('La frecuencia de muestreo no es múltiplo de 8 kHz. No se puede decimar exactamente.');
+    end
+    y8k = decimate(y, factor_decimacion);
 
-s1_8k = downsample(s1,2);
-s2_8k = downsample(s2,3);
-s3_8k = downsample(s3,4);
+    % Cuantización a 12 bits
+    y12b = round(y8k * (2^11 - 1));     % Rango [-2047, 2047]
+    y12b = y12b / (2^11 - 1);           % Normalización [-1, 1]
 
-%Falta fijar a 12-bits la resolución
+    % Espectro
+    Y = abs(fft(y12b));
+    N = length(Y);
+    f = linspace(0, 8000, N);
 
-%Se aumenta la cantidad de muestras a 120k
-s1_120k1 = upsample(s1_8k,15);
-s2_120k1 = upsample(s2_8k,15);
-s3_120k1 = upsample(s3_8k,15);
+    figure(30);
+    subplot(3,1,k);
+    plot(f(1:N/2), 20*log10(Y(1:N/2)), 'Color', colores(k,:));
+    xlabel('Frecuencia (Hz)');
+    ylabel('Magnitud (dB)');
+    title(['Señal final (8kHz, 12 bits): ' archivos{k}]);
+    grid on;
 
-%Igualo la longitud de los vectores
-
-L = max([length(s1_120k1),length(s2_120k1),length(s3_120k1)]);
-s1_120k = [s1_120k1 , zeros(1, L - length(s1_120k1))];
-s2_120k1 = reshape(s2_120k1, 1, []);
-s2_120k = [s2_120k1 , zeros(1, L - length(s2_120k1))];
-s3_120k1 = reshape(s3_120k1, 1, []);
-s3_120k = [s3_120k1 , zeros(1, L - length(s3_120k1))];
-
-
-
-
-
-
-
-
-
-save('ws.mat');
+    % Reproducir
+    fprintf('Reproduciendo original: %s\n', archivos{k});
+    sound(x, fs); pause(3);
+    fprintf('Reproduciendo procesada (8kHz): %s\n', archivos{k});
+    sound(y12b, 8000); pause(3);
+    % Guardar archivo procesado con sufijo '_procesada'
+    [filepath, name, ext] = fileparts(archivos{k});
+    nombre_salida = fullfile(filepath, [name '_procesada' ext]);
+    audiowrite(nombre_salida, y12b, 8000);
+    fprintf('Archivo guardado: %s\n', nombre_salida);
+end
