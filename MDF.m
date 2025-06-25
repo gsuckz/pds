@@ -9,7 +9,7 @@ colores = lines(3);  % Colores para graficar
 fprintf('--- Análisis espectral de señales originales ---\n')
 for k = 1:3 %Bucle para leer las 3 señales
     [x, fs] = audioread(archivos{k});  %Leo la señal obetniendo el vector y su fsamle
-    t = (0:length(x)-1)/fs; %genero el Vector t
+    t = (0:length(x)-1)/fs; %genero el Vector tiempo
 
     % Espectro
     N = length(x);
@@ -131,4 +131,27 @@ for k = 1:3
     nombre_salida = fullfile(filepath, [name '_procesada' ext]);
     audiowrite(nombre_salida, y12b, 8000);
     fprintf('Archivo guardado: %s\n', nombre_salida);
+    
+    % Archivos de entrada ya procesados a 8 kHz
+archivos_procesados = {'16khz_procesada.wav', ...
+                       '24khz_procesada.wav', ...
+                       '32khz_procesada.wav'};
+
+% Factor de interpolación
+L = 15;
+fs_in = 8000;
+fs_out = fs_in * L;
+
+    [s16p, fs] = audioread('16khz_procesada.wav'); 
+    [s24p, fs] = audioread('24khz_procesada.wav'); 
+    [s32p, fs] = audioread('32khz_procesada.wav'); 
+    N  = length(s16p); %puede ser cualquiera porque miden lo mismo
+    R = zeros(1, 15 * N);  % Vector de salida
+
+for i = 1:N 
+
+    posicion_muestra_no_nula = (i-1)*15 + 1;
+    R(posicion_muestra_no_nula)   = s16p(i) + s24p(i) + s32p(i);
+
+    
 end
