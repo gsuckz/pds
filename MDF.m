@@ -8,6 +8,3 @@ archivos = {archivos16khz,archivos24khz,archivos32khz};
 fs_list = [16000, 24000, 32000]; %Genero un vector con las fsamples (puedo hacerlo porque son conocidas)
 colores = lines(3);  % Colores para graficar
 
-
-
-
