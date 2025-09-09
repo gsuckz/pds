@@ -1,6 +1,6 @@
 
 load('archivos_procesados.mat', 'archivos_procesados');
-factor = 15;        % Upsampling
+factor = 14;        % Upsampling
 %Filtros Multiplexado
 fs = 120000;
 banda1 = [12300 15400];       % Banda de paso
@@ -18,32 +18,38 @@ filtro = {};
 for k = 1:3
     % Normalizar frecuencias a Nyquist
     Wn = bandas{k}/(fs/2);  % <--- IMPORTANTE: entre 0 y 1
-    filtro{k} = fir1(15, Wn, 'bandpass'); %Uso orden 15 para hacer 15 muestras de salida con cada muestra de entrada
+    filtro{k} = fir1(14, Wn, 'bandpass'); %Uso orden 15 para hacer 15 muestras de salida con cada muestra de entrada
 end
 save('filtro.mat', 'filtro');
 
-L = length(archivos_procesados{1}) ; %Todos son iguales, de todas formas esto no sería conocido en un sistema de tiempo real
+canal1 = audioread(archivos_procesados{1});
+canal2 = audioread(archivos_procesados{2});
+canal3 = audioread(archivos_procesados{3});
+
+L = length(canal1) ; %Todos son iguales, de todas formas esto no sería conocido en un sistema de tiempo real
 
 
-salida = zeros((L+1)*factor);  % inicializar salida
+salidaMux = zeros((L+1)*factor,1);  % inicializar salida
+salidaSinFiltrar = zeros((L+1)*factor,1);  % inicializar salida
 multDesplazamintoFrecuncia = 1;
 for n = 1:L
     % Posición inicial en la señal de salida
     idx = (n-1)*factor + 1;
-    muestra1 = archivos_procesados{1}(n) * multDesplazamintoFrecuncia;
-    muestra2 = archivos_procesados{2}(n);
-    muestra3 = archivos_procesados{3}(n) * multDesplazamintoFrecuncia;
+    muestra1 = canal1(n) * multDesplazamintoFrecuncia;
+    muestra2 = canal2(n);
+    muestra3 = canal3(n) * multDesplazamintoFrecuncia;
     multDesplazamintoFrecuncia = multDesplazamintoFrecuncia * (-1);
     % Cada ciclo genera 15 muestras
-    idx;
-    salida(idx:idx+factor) = muestra1*filtro{1} + muestra2*filtro{2} + muestra3*filtro{3};
+    salidaMux(idx:idx+factor) = muestra1*filtro{1} + muestra2*filtro{2} + muestra3*filtro{3};
+    salidaSinFiltrar(idx:idx+factor) = muestra1+ muestra2 + muestra3;
+
 end
 
-save('salida.mat','salida');
+save('salidaMux.mat','salidaMux');
 
 %% Señal de salida
 fs_salida = 120000;  % frecuencia de muestreo
-x = salida;
+x = salidaMux;
 
 %% FFT
 N = length(x);
