@@ -119,7 +119,7 @@ bandas = {banda1, banda2, banda3};
 
 % Especificaciones para Kaiser
 ripple_db = 1;          % 1% = 20*log10(1.01) ? 0.09 dB ripple en banda de paso
-atten_db = 20;          % 20 dB atenuacin en banda de rechazo
+atten_db = 40;          % 20 dB atenuacin en banda de rechazo
 
 % Calcular tolerancias
 delta_p = (10^(ripple_db/20) - 1)/(10^(ripple_db/20) + 1);  % Tolerancia banda paso
@@ -127,6 +127,7 @@ delta_s = 10^(-atten_db/20);                                % Tolerancia banda r
 
 % Disear filtros Kaiser y descomponerlos en subfiltros polifsicos
 filtro_polifasico = cell(3,1);
+
 
 for k = 1:3
     % Normalizar frecuencias a Nyquist
@@ -141,7 +142,7 @@ for k = 1:3
     
     % Usar kaiserord para calcular orden y beta
     [N, Wn, beta, ftype] = kaiserord([f_stop(1), f_pass(1), f_pass(2), f_stop(2)], ...
-                                     [0 1 0], [delta_s, delta_p, delta_s], 2);
+                                     [0 1 0], [delta_s, delta_p, delta_s]);
     
     % Asegurar que N sea mltiplo de M para la descomposicin polifsica
     N = M * ceil(N/M);
@@ -150,6 +151,7 @@ for k = 1:3
     
     % Disear filtro Kaiser
     h = fir1(N, Wn, ftype, kaiser(N+1, beta), 'noscale');
+    h_original{k} = h;
     
     % Descomponer en M subfiltros polifsicos
     L = length(h);
@@ -312,8 +314,9 @@ end
 figure;
 for k = 1:3
     % Reconstruir filtro original
-    h_original = reshape(filtro_polifasico{k}', 1, []);
-    [H, w] = freqz(h_original, 1, 1024, fs);
+    %h_original = reshape(filtro_polifasico{k}', 1, []);
+
+    [H, w] = freqz(h_original{k}, 1, 1024, fs);
     
     subplot(3,1,k);
     plot(w, 20*log10(abs(H)));
@@ -335,14 +338,6 @@ end
 fprintf('\n=== COMPARACIN CON FUNCIN FILTER ===\n');
 tic;
 
-% Reconstruir filtros originales desde la descomposicin polifsica
-filtros_originales = cell(3,1);
-for k = 1:3
-    % Reconstruir el filtro original
-    H_poly = filtro_polifasico{k};
-    filtros_originales{k} = reshape(H_poly', 1, []);
-    fprintf('Filtro %d reconstruido - Orden: %d\n', k, length(filtros_originales{k})-1);
-end
 
 % Hacer upsampling de las seales (insertar 14 ceros entre cada muestra)
 canal1_up = zeros(L*factor, 1);
@@ -366,9 +361,9 @@ for n = 1:L
 end
 
 % Filtrar usando la funcin filter()
-canal1_filtrado = filter(filtros_originales{1}, 1, canal1_up);
-canal2_filtrado = filter(filtros_originales{2}, 1, canal2_up);
-canal3_filtrado = filter(filtros_originales{3}, 1, canal3_up);
+canal1_filtrado = filter(h_original{1}, 1, canal1_up);
+canal2_filtrado = filter(h_original{2}, 1, canal2_up);
+canal3_filtrado = filter(h_original{3}, 1, canal3_up);
 
 % Combinar canales
 salidaMux_filter = canal1_filtrado + canal2_filtrado + canal3_filtrado;
