@@ -244,7 +244,7 @@ for n = 1:L
     suma_sin_filtrar = sum(muestras);
     salidaSinFiltrar(idx:idx+factor-1) = suma_sin_filtrar;
 end
-
+salidaMux = 10*salidaMux;
 fprintf('Procesamiento completado.\n');
 
 save('salidaMux_polifasico.mat','salidaMux');
@@ -366,7 +366,7 @@ canal2_filtrado = filter(h_original{2}, 1, canal2_up);
 canal3_filtrado = filter(h_original{3}, 1, canal3_up);
 
 % Combinar canales
-salidaMux_filter = canal1_filtrado + canal2_filtrado + canal3_filtrado;
+salidaMux_filter = 10*(canal1_filtrado + canal2_filtrado + canal3_filtrado);
 
 tiempo_filter = toc;
 fprintf('Tiempo de procesamiento con filter(): %.4f segundos\n', tiempo_filter);
@@ -673,3 +673,4 @@ end
 % Guardar canales individuales
 save('canales_filtrados_individuales.mat', 'canales_filtrados', 'nombres_canales');
 fprintf('\nCanales guardados en: canales_filtrados_individuales.mat\n');
+
