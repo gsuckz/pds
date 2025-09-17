@@ -238,11 +238,11 @@ for n = 1:L
     end
     
     % Guardar las M muestras de salida
-    salidaMux(idx:idx+factor-1) = salida_filtrada;
+    salidaMux(idx:idx+factor-1) = 15*salida_filtrada;
     
     % Salida sin filtrar para comparacin
     suma_sin_filtrar = sum(muestras);
-    salidaSinFiltrar(idx:idx+factor-1) = suma_sin_filtrar;
+    salidaSinFiltrar(idx:idx+factor-1) = 10*suma_sin_filtrar;
 end
 
 fprintf('Procesamiento completado.\n');
