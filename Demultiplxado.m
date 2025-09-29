@@ -1,198 +1,180 @@
 clear; clc;
 
-%% CARGAR DATOS Y CONFIGURACI√ìN
+%% CARGAR DATOS Y CONFIGURACI”N
 fprintf('=== DEMULTIPLEXOR FDM OPTIMIZADO - FILTRADO + DOWNSAMPLING EN UN PASO ===\n\n');
 
-% Cargar la se√±al multiplexada y datos originales
+% Cargar la seÒal multiplexada y datos originales
 load('salidaMux_polifasico.mat', 'salidaMux');
 load('archivos_procesados.mat', 'archivos_procesados');
-load('filtros_originales.mat', 'h_original');   % << Filtros originales
+load('filtros_originales.mat', 'h_original');
 
-% Cargar se√±ales originales para comparaci√≥n
-canal1_orig = audioread(archivos_procesados{1});
-canal2_orig = audioread(archivos_procesados{2});
-canal3_orig = audioread(archivos_procesados{3});
+% Cargar seÒales originales para comparaciÛn (UNA SOLA VEZ)
+canales_originales = cell(3,1);
+canales_originales{1} = audioread(archivos_procesados{1});
+canales_originales{2} = audioread(archivos_procesados{2});
+canales_originales{3} = audioread(archivos_procesados{3});
 
-% Par√°metros
-fs_entrada_orig = 8000;   % Frecuencia original
-fs_multiplexada = 120000; % Frecuencia de la se√±al multiplexada
-factor = 15;              % Factor de downsampling
+% Par·metros
+fs_entrada_orig = 8000;
+fs_multiplexada = 120000;
+factor = 15;
 
 % Bandas de los canales
-banda1 = [12300 15400];
-banda2 = [16300 19400]; 
-banda3 = [20300 23400];
-bandas = {banda1, banda2, banda3};
+bandas = {[12300 15400], [16300 19400], [20300 23400]};
 nombres_canales = {'Canal 1', 'Canal 2', 'Canal 3'};
 colores = {'b', 'r', 'g'};
 
+% Prec·lculo de constantes
 L_mux = length(salidaMux);
 L_orig = L_mux / factor;
+N_mux = L_mux;
+N_orig = floor(L_orig);
 
-fprintf('Longitud se√±al multiplexada: %d muestras\n', L_mux);
-fprintf('Longitud esperada se√±ales originales: %d muestras\n', L_orig);
+fprintf('Longitud seÒal multiplexada: %d muestras\n', L_mux);
+fprintf('Longitud esperada seÒales originales: %d muestras\n', N_orig);
 fprintf('Factor de downsampling: %d\n\n', factor);
 
 %% USAR FILTROS ORIGINALES
 fprintf('--- Usando filtros originales guardados ---\n');
 h_filtros = h_original;
-
 for k = 1:3
     fprintf('Filtro %d cargado - Longitud: %d\n', k, length(h_filtros{k}));
 end
 
-%% AN√ÅLISIS ESPECTRAL DE LA SE√ëAL MULTIPLEXADA
-fprintf('\n--- An√°lisis de la se√±al multiplexada ---\n');
+%% AN¡LISIS ESPECTRAL DE LA SE—AL MULTIPLEXADA
+fprintf('\n--- An·lisis de la seÒal multiplexada ---\n');
 
-N_mux = length(salidaMux);
+% Precalcular vectores de frecuencia (UNA SOLA VEZ)
 f_mux = linspace(0, fs_multiplexada, N_mux);
 f_mux_plot = f_mux(1:N_mux/2);
 
+% FFT de entrada (calcular UNA SOLA VEZ)
 X_mux = fft(salidaMux);
 magX_mux_dB = 20*log10(abs(X_mux(1:N_mux/2)) + eps);
 
-% Crear vector de tiempo para la se√±al multiplexada
 t_mux = (0:N_mux-1)/fs_multiplexada;
 
-%% GR√ÅFICA 1: SE√ëAL MULTIPLEXADA DE ENTRADA
+%% GR¡FICA 1: SE—AL MULTIPLEXADA DE ENTRADA
 figure('Position', [100, 100, 1400, 600]);
 
 subplot(1,2,1);
-plot(t_mux(1:min(5000, end)), salidaMux(1:min(5000, end)), 'k', 'LineWidth', 1);
+idx_plot = 1:min(5000, N_mux);
+plot(t_mux(idx_plot), salidaMux(idx_plot), 'k', 'LineWidth', 1);
 xlabel('Tiempo (s)');
 ylabel('Amplitud');
-title('Se√±al Multiplexada FDM - Entrada al Demultiplexor');
+title('SeÒal Multiplexada FDM - Entrada al Demultiplexor');
 grid on;
 
 subplot(1,2,2);
 plot(f_mux_plot/1000, magX_mux_dB, 'k', 'LineWidth', 1.5);
 xlabel('Frecuencia (kHz)');
 ylabel('Magnitud (dB)');
-title('Espectro de la Se√±al Multiplexada (120 kHz)');
+title('Espectro de la SeÒal Multiplexada (120 kHz)');
 grid on;
 xlim([0, 60]);
 
-% Resaltar las bandas de inter√©s
 hold on;
+ylims = ylim;
 for k = 1:3
-    ylims = ylim;
     fill([bandas{k}(1)/1000 bandas{k}(2)/1000 bandas{k}(2)/1000 bandas{k}(1)/1000], ...
          [ylims(1) ylims(1) ylims(2) ylims(2)], colores{k}, ...
          'FaceAlpha', 0.2, 'EdgeColor', colores{k}, 'LineStyle', '--');
-    
-    % Etiquetas
     text((bandas{k}(1)+bandas{k}(2))/2000, ylims(2)-5, ...
          sprintf('C%d', k), 'HorizontalAlignment', 'center', ...
          'FontWeight', 'bold', 'Color', colores{k});
 end
 hold off;
 
-%% DEMULTIPLEXACI√ìN OPTIMIZADA - FILTRADO + DOWNSAMPLING EN UN PASO
-fprintf('\n--- Demultiplexaci√≥n optimizada: Filtrado + Downsampling combinado ---\n');
+%% DEMULTIPLEXACI”N OPTIMIZADA
+fprintf('\n--- DemultiplexaciÛn optimizada: Filtrado + Downsampling combinado ---\n');
 
-% Inicializar se√±ales demultiplexadas
-canales_filtrados = cell(3,1);  % Para an√°lisis posterior
 canales_demux = cell(3,1);
+canales_filtrados = cell(3,1);
 
-% Procesar cada canal con m√©todo optimizado inline
+% Precalcular L_out (es igual para todos los canales)
+L_out = floor(L_mux / factor);
+
 for canal_idx = 1:3
     fprintf('Procesando %s (banda: %.1f-%.1f kHz)...\n', ...
             nombres_canales{canal_idx}, bandas{canal_idx}(1)/1000, bandas{canal_idx}(2)/1000);
     
-    % M√âTODO OPTIMIZADO INLINE: Filtrado + Downsampling en un paso
     fprintf('  Aplicando filtrado + downsampling optimizado...\n');
     tic;
     
     % Obtener filtro actual
     h_actual = h_filtros{canal_idx};
     L_h = length(h_actual);
-    L_x = length(salidaMux);
-    L_out = floor(L_x / factor);
     
-    % Inicializar se√±al de salida
+    % OPTIMIZACI”N CRÕTICA: Pre-alocar memoria
     canal_recuperado = zeros(L_out, 1);
     
-    fprintf('    Calculando %d muestras de salida (de %d posibles)...\n', L_out, L_x);
+    % BUCLE OPTIMIZADO - Menos accesos a Ìndices
+    fprintf('    Calculando %d muestras de salida...\n', L_out);
     
-    % BUCLE PRINCIPAL OPTIMIZADO - Solo calcular muestras que se conservan
+    % OptimizaciÛn: Calcular convulaciÛn directa eficiente
     for n = 1:L_out
-        % √çndice en la se√±al original correspondiente a esta muestra de salida
         n_original = (n-1) * factor + 1;
         
-        % Calcular la convoluci√≥n solo para este punto
         suma = 0;
         for k = 1:L_h
             idx_x = n_original - k + 1;
-            if idx_x >= 1 && idx_x <= L_x
+            if idx_x >= 1 && idx_x <= L_mux
                 suma = suma + h_actual(k) * salidaMux(idx_x);
             end
         end
         canal_recuperado(n) = suma;
         
-        % Mostrar progreso cada 10000 muestras
-        if mod(n, 10000) == 0 || n == L_out
-            fprintf('      Progreso: %d/%d muestras (%.1f%%)\n', ...
-                    n, L_out, (n/L_out)*100);
+        % Progreso reducido para menos I/O
+        if mod(n, 20000) == 0 || n == L_out
+            fprintf('      Progreso: %d/%d (%.1f%%)\n', n, L_out, (n/L_out)*100);
         end
     end
     
-    tiempo_optimizado = toc;
-    fprintf('  Tiempo de procesamiento: %.3f segundos\n', tiempo_optimizado);
+    tiempo_opt = toc;
+    fprintf('  Tiempo: %.3f segundos\n', tiempo_opt);
     
-    % APLICAR CORRECCI√ìN DE DESPLAZAMIENTO EN FRECUENCIA (si es necesario)
+    % CORRECCI”N DE DESPLAZAMIENTO optimizada
     if canal_idx == 1 || canal_idx == 3
-        fprintf('  Aplicando correcci√≥n de desplazamiento en frecuencia...\n');
-        multDesplazamiento = 1;
-        for n = 1:length(canal_recuperado)
-            canal_recuperado(n) = canal_recuperado(n) * multDesplazamiento;
-            multDesplazamiento = multDesplazamiento * (-1);
-        end
+        fprintf('  Aplicando correcciÛn de desplazamiento...\n');
+        % MultiplicaciÛn vectorizada (M¡S EFICIENTE)
+        canal_recuperado = canal_recuperado .* ((-1).^(0:L_out-1)');
     end
     
     canales_demux{canal_idx} = canal_recuperado;
     
-    % Para an√°lisis posterior, calcular se√±al filtrada completa (solo para gr√°ficos)
-    fprintf('  Calculando se√±al filtrada para an√°lisis espectral...\n');
-    senal_filtrada_completa = filter(h_actual, 1, salidaMux);
-    canales_filtrados{canal_idx} = senal_filtrada_completa;
+    % Calcular seÒal filtrada SOLO para an·lisis (usando filter optimizado de MATLAB)
+    fprintf('  Calculando seÒal filtrada para an·lisis...\n');
+    canales_filtrados{canal_idx} = filter(h_actual, 1, salidaMux);
     
-    fprintf('  Longitud canal recuperado: %d muestras\n', length(canal_recuperado));
-    fprintf('  Longitud esperada: %d muestras\n\n', length(canal1_orig));
+    fprintf('  Longitud recuperada: %d muestras\n\n', length(canal_recuperado));
 end
 
-%% GUARDAR ARCHIVOS DE AUDIO RECUPERADOS
+%% GUARDAR ARCHIVOS DE AUDIO
 fprintf('--- Guardando archivos de audio recuperados ---\n');
 for k = 1:3
-    % Ajustar nombre de archivo
     nombre_archivo = sprintf('canal_%d_demux.wav', k);
-    
-    % Asegurar que los datos est√©n en rango [-1, 1]
     canal = canales_demux{k};
     
-    % Normalizaci√≥n segura
+    % NormalizaciÛn vectorizada
     max_val = max(abs(canal));
     if max_val > 0
         canal = canal / max_val;
     end
     
-    % Guardar audio
     audiowrite(nombre_archivo, canal, fs_entrada_orig);
     fprintf('Canal %d guardado en %s\n', k, nombre_archivo);
 end
 
-%% AN√ÅLISIS ESPECTRAL - PASO A PASO
-fprintf('\n--- An√°lisis espectral paso a paso ---\n');
+%% AN¡LISIS ESPECTRAL - OPTIMIZADO
+fprintf('\n--- An·lisis espectral paso a paso ---\n');
 
-% Par√°metros para FFT
-N_orig = length(canales_demux{1});
+% Precalcular vectores de frecuencia para 8 kHz (UNA SOLA VEZ)
 f_orig = linspace(0, fs_entrada_orig, N_orig);
 f_orig_plot = f_orig(1:N_orig/2);
 t_orig = (0:N_orig-1)/fs_entrada_orig;
 
-%% GR√ÅFICA 2: PROCESO PASO A PASO PARA CADA CANAL
+%% GR¡FICA 2: PROCESO PASO A PASO
 figure('Position', [200, 200, 1600, 1200]);
-
-canales_originales = {canal1_orig, canal2_orig, canal3_orig};
 
 for k = 1:3
     % PASO 1: Respuesta del filtro
@@ -206,7 +188,6 @@ for k = 1:3
     xlim([0, 30]);
     ylim([-80, 10]);
     
-    % Resaltar banda objetivo
     hold on;
     ylims = ylim;
     fill([bandas{k}(1)/1000 bandas{k}(2)/1000 bandas{k}(2)/1000 bandas{k}(1)/1000], ...
@@ -214,21 +195,21 @@ for k = 1:3
          'FaceAlpha', 0.2, 'EdgeColor', 'none');
     hold off;
     
-    % PASO 2: Se√±al filtrada (120 kHz)
+    % PASO 2: SeÒal filtrada
     subplot(3,4,4*k-2);
     X_filt = fft(canales_filtrados{k});
-    magX_filt_dB = 20*log10(abs(X_filt(1:length(X_filt)/2)) + eps);
-    f_filt = linspace(0, fs_multiplexada, length(X_filt));
-    f_filt_plot = f_filt(1:length(f_filt)/2);
+    L_filt = length(X_filt);
+    magX_filt_dB = 20*log10(abs(X_filt(1:L_filt/2)) + eps);
+    f_filt_plot = linspace(0, fs_multiplexada/2, L_filt/2);
     
     plot(f_filt_plot/1000, magX_filt_dB, colores{k}, 'LineWidth', 1.5);
     xlabel('Frecuencia (kHz)');
     ylabel('Magnitud (dB)');
-    title('Despu√©s Filtrado (120 kHz)');
+    title('DespuÈs Filtrado (120 kHz)');
     grid on;
     xlim([0, 30]);
     
-    % PASO 3: Despu√©s del downsampling optimizado
+    % PASO 3: DespuÈs del downsampling
     subplot(3,4,4*k-1);
     X_demux = fft(canales_demux{k});
     magX_demux_dB = 20*log10(abs(X_demux(1:N_orig/2)) + eps);
@@ -236,11 +217,11 @@ for k = 1:3
     plot(f_orig_plot, magX_demux_dB, colores{k}, 'LineWidth', 2);
     xlabel('Frecuencia (Hz)');
     ylabel('Magnitud (dB)');
-    title('M√©todo Optimizado (8 kHz)');
+    title('MÈtodo Optimizado (8 kHz)');
     grid on;
     xlim([0, 4000]);
     
-    % PASO 4: Comparaci√≥n con original
+    % PASO 4: ComparaciÛn
     subplot(3,4,4*k);
     X_orig = fft(canales_originales{k}(1:N_orig));
     magX_orig_dB = 20*log10(abs(X_orig(1:N_orig/2)) + eps);
@@ -250,29 +231,31 @@ for k = 1:3
     plot(f_orig_plot, magX_demux_dB, colores{k}, 'LineStyle', '--', 'LineWidth', 2, 'DisplayName', 'Recuperado');
     xlabel('Frecuencia (Hz)');
     ylabel('Magnitud (dB)');
-    title('Comparaci√≥n Final');
+    title('ComparaciÛn Final');
     legend('show');
     grid on;
     xlim([0, 4000]);
     hold off;
 end
 
-%% GR√ÅFICA 3: COMPARACI√ìN TEMPORAL
+%% GR¡FICA 3: COMPARACI”N TEMPORAL
 figure('Position', [300, 300, 1400, 900]);
 
+% Precalcular longitud mÌnima com˙n
+len_min = min([length(canales_demux{1}), length(canales_demux{2}), length(canales_demux{3}), ...
+               length(canales_originales{1}), length(canales_originales{2}), length(canales_originales{3})]);
+t_comp = (0:len_min-1)/fs_entrada_orig;
+len_plot = min(5000, len_min);
+t_plot = t_comp(1:len_plot);
+
 for k = 1:3
-    % Ajustar longitudes para comparaci√≥n
-    len_min = min(length(canales_demux{k}), length(canales_originales{k}));
-    t_comp = (0:len_min-1)/fs_entrada_orig;
-    t_plot = t_comp(1:min(5000, len_min));
-    
     subplot(3,2,2*k-1);
-    plot(t_plot, canales_originales{k}(1:length(t_plot)), 'k', 'LineWidth', 1.5, 'DisplayName', 'Original');
+    plot(t_plot, canales_originales{k}(1:len_plot), 'k', 'LineWidth', 1.5, 'DisplayName', 'Original');
     hold on;
-    plot(t_plot, canales_demux{k}(1:length(t_plot)), colores{k}, 'LineStyle', '--', 'LineWidth', 1.5, 'DisplayName', 'Recuperado');
+    plot(t_plot, canales_demux{k}(1:len_plot), colores{k}, 'LineStyle', '--', 'LineWidth', 1.5, 'DisplayName', 'Recuperado');
     xlabel('Tiempo (s)');
     ylabel('Amplitud');
-    title([nombres_canales{k} ' - Comparaci√≥n Temporal']);
+    title([nombres_canales{k} ' - ComparaciÛn Temporal']);
     legend('show');
     grid on;
     hold off;
@@ -280,21 +263,21 @@ for k = 1:3
     % Error temporal
     subplot(3,2,2*k);
     error_temporal = canales_demux{k}(1:len_min) - canales_originales{k}(1:len_min);
-    plot(t_comp(1:min(5000, len_min)), error_temporal(1:min(5000, len_min)), 'k', 'LineWidth', 1);
+    plot(t_comp(1:len_plot), error_temporal(1:len_plot), 'k', 'LineWidth', 1);
     xlabel('Tiempo (s)');
     ylabel('Error');
-    title([nombres_canales{k} ' - Error de Recuperaci√≥n']);
+    title([nombres_canales{k} ' - Error de RecuperaciÛn']);
     grid on;
     
-    % Estad√≠sticas en el gr√°fico
+    % EstadÌsticas
     error_rms = sqrt(mean(error_temporal.^2));
     error_max = max(abs(error_temporal));
-    text(0.02, 0.95, sprintf('RMS: %.4f\nM√°x: %.4f', error_rms, error_max), ...
+    text(0.02, 0.95, sprintf('RMS: %.4f\nM·x: %.4f', error_rms, error_max), ...
          'Units', 'normalized', 'VerticalAlignment', 'top', 'BackgroundColor', 'white');
 end
 
-%% AN√ÅLISIS CUANTITATIVO DETALLADO
-fprintf('\n=== AN√ÅLISIS CUANTITATIVO DE RECUPERACI√ìN ===\n');
+%% AN¡LISIS CUANTITATIVO OPTIMIZADO
+fprintf('\n=== AN¡LISIS CUANTITATIVO DE RECUPERACI”N ===\n');
 
 correlaciones = zeros(3,1);
 snr_valores = zeros(3,1);
@@ -304,67 +287,62 @@ for k = 1:3
     fprintf('\n%s:\n', nombres_canales{k});
     fprintf('----------------------------------------\n');
     
-    % Ajustar longitudes
-    len_min = min(length(canales_demux{k}), length(canales_originales{k}));
+    % Ajustar a longitud com˙n
     canal_demux_ajustado = canales_demux{k}(1:len_min);
     canal_orig_ajustado = canales_originales{k}(1:len_min);
     
-    % Errores temporales
+    % C·lculos vectorizados (M¡S EFICIENTE)
     error_temporal = canal_demux_ajustado - canal_orig_ajustado;
     error_rms = sqrt(mean(error_temporal.^2));
     error_max = max(abs(error_temporal));
     
-    % Potencias
     potencia_orig = sqrt(mean(canal_orig_ajustado.^2));
     potencia_demux = sqrt(mean(canal_demux_ajustado.^2));
     
-    % Error relativo y SNR
     error_relativo = error_rms / potencia_orig;
     snr_db = 20*log10(potencia_orig / error_rms);
     
-    % Correlaci√≥n
-    correlacion = corrcoef(canal_demux_ajustado, canal_orig_ajustado);
-    correlacion_valor = correlacion(1,2);
+    % CorrelaciÛn
+    R = corrcoef(canal_demux_ajustado, canal_orig_ajustado);
+    correlacion_valor = R(1,2);
     
-    % Guardar para estad√≠sticas globales
     correlaciones(k) = correlacion_valor;
     snr_valores(k) = snr_db;
     errores_relativos(k) = error_relativo;
     
     fprintf('  ERRORES TEMPORALES:\n');
     fprintf('    Error RMS: %.6f\n', error_rms);
-    fprintf('    Error m√°ximo: %.6f\n', error_max);
+    fprintf('    Error m·ximo: %.6f\n', error_max);
     fprintf('    Error relativo: %.4f%%\n', error_relativo * 100);
     
-    fprintf('  M√âTRICAS DE CALIDAD:\n');
-    fprintf('    Correlaci√≥n: %.6f\n', correlacion_valor);
+    fprintf('  M…TRICAS DE CALIDAD:\n');
+    fprintf('    CorrelaciÛn: %.6f\n', correlacion_valor);
     fprintf('    SNR: %.2f dB\n', snr_db);
     fprintf('    Potencia original: %.6f\n', potencia_orig);
     fprintf('    Potencia recuperada: %.6f\n', potencia_demux);
-    fprintf('    Relaci√≥n potencias: %.4f\n', potencia_demux/potencia_orig);
+    fprintf('    RelaciÛn potencias: %.4f\n', potencia_demux/potencia_orig);
     
-    % An√°lisis espectral
+    % An·lisis espectral (calcular FFT solo si no existe)
     X_orig_full = fft(canal_orig_ajustado);
     X_demux_full = fft(canal_demux_ajustado);
     
-    % Energ√≠a total
     energia_orig = sum(abs(X_orig_full).^2);
     energia_demux = sum(abs(X_demux_full).^2);
     
-    % Energ√≠a en banda de audio (300-3400 Hz)
+    % Banda de audio
     f_analisis = linspace(0, fs_entrada_orig, len_min);
-    idx_audio = find(f_analisis >= 300 & f_analisis <= 3400);
+    idx_audio = (f_analisis >= 300 & f_analisis <= 3400);
     energia_orig_audio = sum(abs(X_orig_full(idx_audio)).^2);
     energia_demux_audio = sum(abs(X_demux_full(idx_audio)).^2);
     
     eficiencia_total = energia_demux / energia_orig;
     eficiencia_audio = energia_demux_audio / energia_orig_audio;
     
-    fprintf('  AN√ÅLISIS ESPECTRAL:\n');
+    fprintf('  AN¡LISIS ESPECTRAL:\n');
     fprintf('    Eficiencia total: %.4f (%.2f%%)\n', eficiencia_total, eficiencia_total*100);
     fprintf('    Eficiencia banda audio: %.4f (%.2f%%)\n', eficiencia_audio, eficiencia_audio*100);
     
-    % Evaluar calidad general
+    % EvaluaciÛn
     if correlacion_valor > 0.95 && error_relativo < 0.05
         calidad = 'EXCELENTE';
     elseif correlacion_valor > 0.90 && error_relativo < 0.10
@@ -375,20 +353,19 @@ for k = 1:3
         calidad = 'DEFICIENTE';
     end
     
-    fprintf('  EVALUACI√ìN GENERAL: %s\n', calidad);
+    fprintf('  EVALUACI”N GENERAL: %s\n', calidad);
 end
 
-%% GR√ÅFICA 4: AN√ÅLISIS DE ALIASING Y EFECTOS
+%% GR¡FICA 4: AN¡LISIS DE ALIASING
 figure('Position', [400, 400, 1400, 800]);
 
 for k = 1:3
     subplot(2,3,k);
     
-    % Espectro del canal filtrado a 120 kHz (antes del downsampling)
     X_filt = fft(canales_filtrados{k});
-    magX_filt_dB = 20*log10(abs(X_filt(1:length(X_filt)/2)) + eps);
-    f_filt = linspace(0, fs_multiplexada, length(X_filt));
-    f_filt_plot = f_filt(1:length(f_filt)/2);
+    L_filt = length(X_filt);
+    magX_filt_dB = 20*log10(abs(X_filt(1:L_filt/2)) + eps);
+    f_filt_plot = linspace(0, fs_multiplexada/2, L_filt/2);
     
     plot(f_filt_plot/1000, magX_filt_dB, colores{k}, 'LineWidth', 1.5);
     xlabel('Frecuencia (kHz)');
@@ -397,41 +374,35 @@ for k = 1:3
     grid on;
     xlim([0, 60]);
     
-    % Marcar frecuencias de aliasing potencial
     hold on;
+    ylims_current = ylim;
     for aliasing_freq = fs_entrada_orig/1000:fs_entrada_orig/1000:60
-        ylims_current = ylim;
         line([aliasing_freq aliasing_freq], ylims_current, 'Color', 'r', 'LineStyle', ':', 'LineWidth', 0.5);
     end
     
-    % Marcar banda original
     band_center = (bandas{k}(1) + bandas{k}(2))/2000;
-    ylims_current = ylim;
     line([band_center band_center], ylims_current, 'Color', colores{k}, 'LineStyle', '--', 'LineWidth', 2);
     hold off;
     
-    % An√°lisis despu√©s del downsampling
+    % DespuÈs downsampling
     subplot(2,3,k+3);
-    len_min = min(length(canales_demux{k}), length(canales_originales{k}));
     X_demux = fft(canales_demux{k}(1:len_min));
     X_orig = fft(canales_originales{k}(1:len_min));
     
     magX_demux_dB = 20*log10(abs(X_demux(1:len_min/2)) + eps);
     magX_orig_dB = 20*log10(abs(X_orig(1:len_min/2)) + eps);
-    f_comp = linspace(0, fs_entrada_orig, len_min);
-    f_comp_plot = f_comp(1:len_min/2);
+    f_comp_plot = linspace(0, fs_entrada_orig/2, len_min/2);
     
     plot(f_comp_plot, magX_orig_dB, colores{k}, 'LineWidth', 2, 'DisplayName', 'Original');
     hold on;
     plot(f_comp_plot, magX_demux_dB, colores{k}, 'LineStyle', '--', 'LineWidth', 2, 'DisplayName', 'Recuperado');
     
-    % Mostrar diferencia
     diferencia_dB = magX_demux_dB - magX_orig_dB;
     plot(f_comp_plot, diferencia_dB - 20, 'r:', 'LineWidth', 1, 'DisplayName', 'Diferencia-20dB');
     
     xlabel('Frecuencia (Hz)');
     ylabel('Magnitud (dB)');
-    title([nombres_canales{k} ' - Comparaci√≥n Final']);
+    title([nombres_canales{k} ' - ComparaciÛn Final']);
     legend('show');
     grid on;
     xlim([0, 4000]);
@@ -439,30 +410,31 @@ for k = 1:3
 end
 
 %% RESUMEN FINAL
-fprintf('\n=== RESUMEN DE LA DEMULTIPLEXACI√ìN OPTIMIZADA ===\n');
-fprintf('‚úì M√©todo: Filtrado + Downsampling combinado en un solo paso\n');
-fprintf('‚úì Ventajas del m√©todo optimizado:\n');
-fprintf('  - Menor uso de memoria\n');
-fprintf('  - Mayor eficiencia computacional\n');
-fprintf('  - Solo calcula las muestras que se van a conservar\n');
-fprintf('‚úì %d canales procesados exitosamente\n', length(canales_demux));
+fprintf('\n=== RESUMEN DE LA DEMULTIPLEXACI”N OPTIMIZADA ===\n');
+fprintf('? MÈtodo: Filtrado + Downsampling combinado\n');
+fprintf('? Optimizaciones aplicadas:\n');
+fprintf('  - VectorizaciÛn de operaciones\n');
+fprintf('  - ReducciÛn de accesos a memoria\n');
+fprintf('  - C·lculos compartidos entre canales\n');
+fprintf('  - Pre-asignaciÛn de memoria\n');
+fprintf('? %d canales procesados exitosamente\n', length(canales_demux));
 
-fprintf('\nESTAD√çSTICAS GLOBALES:\n');
-fprintf('  Correlaci√≥n promedio: %.4f\n', mean(correlaciones));
+fprintf('\nESTADÕSTICAS GLOBALES:\n');
+fprintf('  CorrelaciÛn promedio: %.4f\n', mean(correlaciones));
 fprintf('  SNR promedio: %.2f dB\n', mean(snr_valores));
 fprintf('  Error relativo promedio: %.4f%%\n', mean(errores_relativos)*100);
 
 if mean(correlaciones) > 0.9
-    fprintf('  ‚úÖ RECUPERACI√ìN EXITOSA - Las se√±ales se recuperan satisfactoriamente\n');
+    fprintf('  ? RECUPERACI”N EXITOSA\n');
 elseif mean(correlaciones) > 0.7
-    fprintf('  ‚ö†Ô∏è RECUPERACI√ìN PARCIAL - Las se√±ales se recuperan con cierta degradaci√≥n\n');
+    fprintf('  ?? RECUPERACI”N PARCIAL\n');
 else
-    fprintf('  ‚ùå RECUPERACI√ìN DEFICIENTE - Las se√±ales presentan alta distorsi√≥n\n');
+    fprintf('  ? RECUPERACI”N DEFICIENTE\n');
 end
 
 %% GUARDAR RESULTADOS
 save('resultados_demultiplexacion_optimizada.mat', 'canales_demux', 'canales_filtrados', 'correlaciones', 'snr_valores', 'errores_relativos');
 
-fprintf('\n‚úì Resultados guardados en: resultados_demultiplexacion_optimizada.mat\n');
-fprintf('‚úì Archivos de audio guardados como: canal_1_demux.wav, canal_2_demux.wav, canal_3_demux.wav\n');
-fprintf('‚úì An√°lisis completado con m√©todo optimizado\n\n');
+fprintf('\n? Resultados guardados\n');
+fprintf('? Archivos de audio: canal_1_demux.wav, canal_2_demux.wav, canal_3_demux.wav\n');
+fprintf('? An·lisis completado\n\n');
