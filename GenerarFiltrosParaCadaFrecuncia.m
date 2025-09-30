@@ -1,6 +1,9 @@
 fs_list = [16000, 24000, 32000]; %Genero un vector con las fsamples (puedo hacerlo porque son conocidas)
 % FILTROS DIGITALES PARA 3 TASAS DE MUESTREO
 filtros = {};
+fp = 3400;
+Ap = 1;
+As = 30;
 ordenes = [];
 for i = 1:3
     fs = fs_list(i);
